@@ -71,6 +71,10 @@ public class JobAction {
         return this.xpWin;
     }
 
+    public void setJobStat(JobStat jobStat) {
+        this.SM = jobStat;
+    }
+
     public JobStat getJobStat() {
         return this.SM;
     }
@@ -2481,14 +2485,15 @@ public class JobAction {
             if(this.player.getGroup() != null)
                 player.sendMessage("Puit before : " + puit);
 
-            if (puit > 0)
-                puit = Math.round(puit - PWGLoose);
-            if (puit < 0) {
-                PWGLoose = -puit;
-                puit = 0;
+            if (puit > 0) {
+                if (puit >= PWGLoose) {
+                    puit = Math.round(puit - PWGLoose);
+                    PWGLoose = 0;
+                } else {
+                    PWGLoose -= puit;
+                    puit = 0;
+                }
             }
-            if (puit > 0)
-                puit = Math.round(puit - PWGLoose);
 
             if(this.player.getGroup() != null)
                 player.sendMessage("Puit after : " + puit);
@@ -2526,13 +2531,12 @@ public class JobAction {
                         if (random > brokeJet) {
                             blacklist.add(id);
                         } else {
-                            int puitLoose = Formulas.getRandomValue(1, (int) (Math.ceil(PWGLoose / PWRJetRune)));
-                            int old = gameObject.getStats().get(id);
+                            int current = gameObject.getStats().get(id);
+                            int maxLoose = Math.max(1, Math.min(current, (int) Math.ceil(PWGLoose / rune.getWeight())));
+                            int puitLoose = Formulas.getRandomValue(1, maxLoose);
                             int value = gameObject.getStats().addOneStat(id, -puitLoose);
-                            old = old - puitLoose;
 
-                            PWGLoose = PWGLoose - (PWRGJet - (rune.getWeight() * value));
-                            if(old < 0) PWGLoose += -old * rune.getWeight();
+                            PWGLoose -= rune.getWeight() * (current - value);
                         }
                         actualObjectSplitStats = gameObject.encodeStats().split(",");
                         stats = getStatsToLoose(runeTemplate, actualObjectSplitStats, originalSplitStats, blacklist);
@@ -2540,7 +2544,7 @@ public class JobAction {
 
                     if(this.player.getGroup() != null)
                         player.sendMessage("Puit remove PWGLoose : " + PWGLoose);
-                    puit = -(int) Math.ceil(PWGLoose);
+
                 }
             }
             //endregion
@@ -2557,20 +2561,19 @@ public class JobAction {
                     float PWRJetRune = rune.getWeight() * rune.getBonus();
                     float PWRGJet = this.getPWR(rune, jet, (byte) 1);
 
-                    int puitLoose = Formulas.getRandomValue(1, (int) (Math.ceil(PWGLoose / PWRJetRune)));
-                    int old = gameObject.getStats().get(id);
+                    int current = gameObject.getStats().get(id);
+                    int maxLoose = Math.max(1, Math.min(current, (int) Math.ceil(PWGLoose / rune.getWeight())));
+                    int puitLoose = Formulas.getRandomValue(1, maxLoose);
                     int value = gameObject.getStats().addOneStat(id, -puitLoose);
-                    old = old - puitLoose;
 
-                    PWGLoose = PWGLoose - (PWRGJet - (rune.getWeight() * value));
-                    if(old < 0) PWGLoose += -old * rune.getWeight();
+                    PWGLoose -= rune.getWeight() * (current - value);
                     actualObjectSplitStats = gameObject.encodeStats().split(",");
                     stats = getStatsToLoose(runeTemplate, actualObjectSplitStats, originalSplitStats, null);
                 }
 
                 if(this.player.getGroup() != null)
                     player.sendMessage("Puit remove PWGLoose : " + PWGLoose);
-                puit = - (int) Math.ceil(PWGLoose);
+
             }
             //endregion
 

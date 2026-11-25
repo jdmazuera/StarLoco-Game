@@ -42,6 +42,11 @@ local function checkRequirements(p, requirements)
     end
 
     local tool = p:gearAt(WeaponSlot)
+    if (requirements.toolIDs or requirements.toolType) and not tool then
+        print("NO TOOL EQUIPPED FOR JOB")
+        return false
+    end
+
     if requirements.toolIDs and not table.contains(requirements.toolIDs, tool:id()) then
         print("WRONG TOOL FOR JOB")
         -- Wrong tool
@@ -66,6 +71,13 @@ end
 ---@param requirements SkillRequirements
 ---@param ingredientCountFn fun(p:Player):number
 function registerCraftSkill(skillId,  requirements, ingredientCountFn)
+    if not ingredientCountFn then
+        if not (requirements and requirements.jobID) then
+            error(string.format("Craft skill #%d needs a jobID or an ingredientCountFn", skillId))
+        end
+        ingredientCountFn = ingredientsForCraftJob(requirements.jobID)
+    end
+
     SKILLS[skillId] = function(p, cellId)
         if not checkRequirements(p, requirements) then return end
 
@@ -204,9 +216,10 @@ function ingredientsForCraftJob(jobID)
     return function(p)
         local lvl = p:jobLevel(jobID)
 
-        if lvl == 100 then return 9
+        -- Same as JobConstant.getTotalCaseByJobLevel (must be an integer for Java)
+        if lvl >= 100 then return 9
         elseif lvl < 10 then return 2
-        else return lvl/20 + 4 end
+        else return math.floor(lvl / 20) + 3 end
     end
 end
 

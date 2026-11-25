@@ -3766,8 +3766,21 @@ public class Player implements Scripted<SPlayer>, Actor {
     }
 
     public void useCraftSkill(int skillId, int ingredientsCount) {
+        JobStat jobStat = getMetierBySkill(skillId);
+        JobAction jobAction = jobStat == null ? null : jobStat.getJobActionBySkill(skillId);
+        if (jobAction == null) {
+            // Skill not tied to a learned job (e.g. 22, 110, 121): crafts are read from jobs_data by skill id
+            if (World.world.getMetier(skillId) == null) return;
+            jobAction = new JobAction(skillId, ingredientsCount, 0, true, 100, -1);
+        }
+        jobAction.player = this;
+        jobAction.setJobStat(jobStat);
+        jobAction.ingredients.clear();
+        jobAction.setJobCraft(null);
+        jobAction.broken = false;
+
         setAway(true);
-        setExchangeAction(new ExchangeAction<>(ExchangeAction.CRAFTING, skillId));
+        setExchangeAction(new ExchangeAction<>(ExchangeAction.CRAFTING, jobAction));
 
         SocketManager.GAME_SEND_ECK_PACKET(this, 3, ingredientsCount + ";" + skillId);
     }
