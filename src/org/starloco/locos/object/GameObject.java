@@ -221,11 +221,9 @@ public class GameObject {
                     }
 
                     boolean follow2 = true;
-                    for (int a : Constant.ARMES_EFFECT_IDS) {
-                        if (a == id) {
-                            Effects.add(new SpellEffect(id, stats[1] + ";" + stats[2] + ";-1;0;0;" + stats[4], 0, -1));
-                            follow2 = false;
-                        }
+                    if (Constant.isWeaponEffect(id, this.getTemplate().getType())) {
+                        Effects.add(new SpellEffect(id, stats[1] + ";" + stats[2] + ";-1;0;0;" + stats[4], 0, -1));
+                        follow2 = false;
                     }
                     if (!follow2)
                         continue;//Si c'�tait un effet Actif d'arme ou une signature
@@ -236,6 +234,12 @@ public class GameObject {
                 }
             }
         }
+    }
+
+    /** On-hit weapon effect (see Constant.isWeaponEffect) for min..max, in the same format as parseStringToStats. */
+    public static SpellEffect weaponEffect(int effectId, int min, int max) {
+        String jet = min == max ? "0d0+" + min : "1d" + (max - min + 1) + "+" + (min - 1);
+        return new SpellEffect(effectId, Integer.toHexString(min) + ";" + (min == max ? "0" : Integer.toHexString(max)) + ";-1;0;0;" + jet, 0, -1);
     }
 
     public void addTxtStat(int i, String s) {
@@ -739,9 +743,7 @@ public class GameObject {
             int statID = Integer.parseInt(stats[0], 16);
             boolean follow = true;
 
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                //Si c'est un Effet Actif
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, this.getTemplate().getType()))
                     follow = false;
             if (!follow)
                 continue;//Si c'�tait un effet Actif d'arme
@@ -1050,8 +1052,7 @@ public class GameObject {
 
             trouve = true;
             boolean sig = true;
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, this.getTemplate().getType()))
                     sig = false;
             if (!sig)
                 continue;
@@ -1152,8 +1153,7 @@ public class GameObject {
 
             trouve = true;
             boolean sig = true;
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, this.getTemplate().getType()))
                     sig = false;
             if (!sig)
                 continue;

@@ -1484,8 +1484,7 @@ public class JobAction {
             String[] stats = s.split("#");
             int statID = Integer.parseInt(stats[0], 16);
             boolean sig = true;
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, World.world.getObjTemplate(objTemplateID).getType()))
                     sig = false;
             if (!sig)
                 continue;
@@ -1558,8 +1557,7 @@ public class JobAction {
             String[] stats = s.split("#");
             int statID = Integer.parseInt(stats[0], 16);
             boolean sig = true;
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, World.world.getObjTemplate(objTemplateID).getType()))
                     sig = false;
             if (!sig)
                 continue;
@@ -1701,8 +1699,7 @@ public class JobAction {
             if (statID == 985 || statID == 988)
                 continue;
             boolean xy = false;
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, obj.getTemplate().getType()))
                     xy = true;
             if (xy)
                 continue;
@@ -2670,16 +2667,17 @@ public class JobAction {
 
         GameObject newObject = gameObject.getClone(1, true);
         boolean converted = false;
-        for (SpellEffect effect : newObject.getEffects()) {
+        ArrayList<SpellEffect> effects = newObject.getEffects();
+        for (int i = 0; i < effects.size(); i++) {
+            SpellEffect effect = effects.get(i);
             if (effect.getEffectID() != 100 && effect.getEffectID() != 95) continue;
             String[] args = effect.getArgs().split(";");
             int min = Integer.parseInt(args[0], 16), max = Integer.parseInt(args[1], 16);
             if (max < min) max = min; // fixed damage lines store max = 0
             min = Math.max(1, min * keepPercent / 100);
             max = Math.max(min, max * keepPercent / 100);
-            String jet = min == max ? "0d0+" + min : "1d" + (max - min + 1) + "+" + (min - 1);
-            effect.setEffectID(effect.getEffectID() == 100 ? potion[0] : potion[0] - 5); // steal ids are damage ids - 5
-            effect.setArgs(Integer.toHexString(min) + ";" + (min == max ? "0" : Integer.toHexString(max)) + ";-1;0;0;" + jet);
+            int newId = effect.getEffectID() == 100 ? potion[0] : potion[0] - 5; // steal ids are damage ids - 5
+            effects.set(i, GameObject.weaponEffect(newId, min, max)); // new effect: fights read the jet set at construction
             converted = true;
         }
         if (!converted) {

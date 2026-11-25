@@ -231,6 +231,19 @@ public class Constant {
     public static final int[] BEGIN_TURN_BUFF = {91, 92, 93, 94, 95, 96, 97, 98, 99, 89, 100, 108};
     //Buff des Armes
     public static final int[] ARMES_EFFECT_IDS = {91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 108};
+    // On weapons these ids are on-hit effects (heal, steal AP, remove MP, steal kamas); on other items 127 is a -MP malus
+    private static final int[] WEAPON_ONLY_EFFECT_IDS = {81, 84, 127, 130};
+    private static final int[] WEAPON_ITEM_TYPES = {2, 3, 4, 5, 6, 7, 8, 19, 20, 21, 22, 102, 114};
+
+    public static boolean isWeaponEffect(int effectId, int itemType) {
+        for (int a : ARMES_EFFECT_IDS) if (a == effectId) return true;
+        for (int a : WEAPON_ONLY_EFFECT_IDS)
+            if (a == effectId) {
+                for (int t : WEAPON_ITEM_TYPES) if (t == itemType) return true;
+                return false;
+            }
+        return false;
+    }
     //Buff a ne pas booster en cas de CC
     public static final int[] NO_BOOST_CC_IDS = {101};
     //Invocation Statiques

@@ -185,6 +185,18 @@ public class ObjectData extends FunctionDAO<GameObject> {
                 if (object != null) {
                     for (String pair : edit.getValue()[1].split(";")) {
                         if (pair.isEmpty()) continue;
+                        if (pair.startsWith("W=")) { // all on-hit weapon effects, replaced as a whole
+                            int type = object.getTemplate().getType();
+                            object.getEffects().removeIf(e -> Constant.isWeaponEffect(e.getEffectID(), type));
+                            for (String line : pair.substring(2).split("\\|")) {
+                                if (line.isEmpty()) continue;
+                                String[] l = line.split(",");
+                                int id = Integer.parseInt(l[0]), min = Integer.parseInt(l[1]), max = Integer.parseInt(l[2]);
+                                if (Constant.isWeaponEffect(id, type) && min >= 1 && max >= min)
+                                    object.getEffects().add(GameObject.weaponEffect(id, min, max));
+                            }
+                            continue;
+                        }
                         String[] kv = pair.split(":");
                         int statId = Integer.parseInt(kv[0]), value = Integer.parseInt(kv[1]);
                         if (value == 0) object.getStats().getEffects().remove(statId);

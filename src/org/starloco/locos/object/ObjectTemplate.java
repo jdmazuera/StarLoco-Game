@@ -500,8 +500,7 @@ public class ObjectTemplate {
             boolean follow = true;
 
 
-            for (int a : Constant.ARMES_EFFECT_IDS)
-                if (a == statID)
+            if (Constant.isWeaponEffect(statID, this.getType()))
                     follow = false;
             if (!follow)//Si c'�tait un effet Actif d'arme
                 continue;
@@ -558,14 +557,12 @@ public class ObjectTemplate {
         for (String s : splitted) {
             String[] stats = s.split("#");
             int statID = Integer.parseInt(stats[0], 16);
-            for (int a : Constant.ARMES_EFFECT_IDS) {
-                if (a == statID) {
-                    String min = stats[1];
-                    String max = stats[2];
-                    String jet = stats[4];
-                    String args = min + ";" + max + ";-1;-1;0;" + jet;
-                    Effets.add(new SpellEffect(statID, args, 0, -1));
-                }
+            if (Constant.isWeaponEffect(statID, this.getType())) {
+                String min = stats[1];
+                String max = stats[2];
+                String jet = stats[4];
+                String args = min + ";" + max + ";-1;-1;0;" + jet;
+                Effets.add(new SpellEffect(statID, args, 0, -1));
             }
             switch (statID) {
                 case 110:
