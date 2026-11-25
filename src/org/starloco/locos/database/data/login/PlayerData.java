@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.apache.commons.lang.NotImplementedException;
 import org.starloco.locos.client.Account;
 import org.starloco.locos.client.Player;
+import org.starloco.locos.common.SocketManager;
 import org.starloco.locos.database.DatabaseManager;
 
 import org.starloco.locos.database.data.FunctionDAO;
@@ -19,7 +20,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
 
 public class PlayerData extends FunctionDAO<Player> {
@@ -425,6 +428,46 @@ public class PlayerData extends FunctionDAO<Player> {
             execute(p);
             close(p);
         } catch (SQLException e) {
+            super.sendError(e);
+        }
+    }
+
+    private boolean webEditsTableReady = false;
+
+    /** Applies characteristic resets/boosts queued by the web panel, using the game's own rules and costs. */
+    public void applyWebEdits() {
+        try {
+            if (!webEditsTableReady) {
+                execute("CREATE TABLE IF NOT EXISTS web_player_edits (id INT AUTO_INCREMENT PRIMARY KEY, player_id INT NOT NULL, action VARCHAR(10) NOT NULL, stat INT NOT NULL DEFAULT 0, amount INT NOT NULL DEFAULT 0)");
+                webEditsTableReady = true;
+            }
+            List<int[]> edits = new ArrayList<>(); // id, player, isReset, stat, amount, account
+            getData("SELECT e.*, p.account FROM web_player_edits e LEFT JOIN " + getTableName() + " p ON p.id = e.player_id ORDER BY e.id;", result -> {
+                while (result.next())
+                    edits.add(new int[]{result.getInt("id"), result.getInt("player_id"), "reset".equals(result.getString("action")) ? 1 : 0, result.getInt("stat"), result.getInt("amount"), result.getInt("account")});
+            });
+
+            for (int[] edit : edits) {
+                Player player = World.world.getPlayer(edit[1]);
+                if (player == null && edit[5] > 0) { // offline and not cached: load its account like a login does
+                    World.world.ensureAccountLoaded(edit[5]);
+                    player = World.world.getPlayer(edit[1]);
+                }
+                if (player != null && player.getFight() != null) continue; // retried after the fight
+
+                if (player != null) {
+                    if (edit[2] == 1) {
+                        player.resetStats(false); // keeps scroll points, gives back the capital
+                        update(player);
+                    } else if (edit[3] >= 10 && edit[3] <= 15 && edit[4] > 0 && edit[4] <= 2000) {
+                        player.boostStatFixedCount(edit[3], edit[4]); // charges the class cost per point and saves
+                    }
+                    player.refreshStats();
+                    SocketManager.GAME_SEND_STATS_PACKET(player);
+                }
+                execute("DELETE FROM web_player_edits WHERE id = " + edit[0] + ";");
+            }
+        } catch (Exception e) {
             super.sendError(e);
         }
     }
