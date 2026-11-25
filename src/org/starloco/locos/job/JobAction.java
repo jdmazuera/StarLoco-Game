@@ -285,6 +285,10 @@ public class JobAction {
 
         if (this.isMaging()) {
             this.craftMaging1(isRepeat, 1);
+            if (!isRepeat && this.jobCraft != null) { // early returns in craftMaging1 left the craft open
+                this.oldJobCraft = this.jobCraft;
+                this.jobCraft = null;
+            }
             return;
         }
 
@@ -2632,9 +2636,83 @@ public class JobAction {
             this.oldJobCraft = this.jobCraft;
             if (!isReapeat) this.setJobCraft(null);
         } else if(potionObject != null) {
-
+            this.applyElementPotion(gameObject, potionObject);
         }
         //endregion
+    }
+
+    // Elemental smithmagic potions: template id -> {damage effect id of the element, potion level}
+    private static final Map<Integer, int[]> ELEMENT_POTIONS = new HashMap<>();
+    static {
+        int[][] potions = { // fire 99, water 96, air 98, earth 97
+                {1333, 99, 1}, {1343, 99, 25}, {1345, 99, 50},
+                {1335, 96, 1}, {1341, 96, 25}, {1346, 96, 50},
+                {1337, 98, 1}, {1342, 98, 25}, {1347, 98, 50},
+                {1338, 97, 1}, {1340, 97, 25}, {1348, 97, 50}};
+        for (int[] p : potions) ELEMENT_POTIONS.put(p[0], new int[]{p[1], p[2]});
+    }
+
+    /** Turns the weapon's neutral damage (100) and neutral life steal (95) into the potion's element. */
+    private void applyElementPotion(GameObject gameObject, GameObject potionObject) {
+        int[] potion = ELEMENT_POTIONS.get(potionObject.getTemplate().getId());
+        int jobId = this.SM.getTemplate().getId();
+        if (potion == null || jobId < 43 || jobId > 50) { // only weapon smithmagi use element potions
+            this.player.sendMessage("Esta poción no se puede usar en este taller.");
+            SocketManager.GAME_SEND_Ec_PACKET(this.player, "EI");
+            return;
+        }
+        if (this.SM.get_lvl() < potion[1]) {
+            this.player.sendMessage("Necesitas nivel " + potion[1] + " en el oficio para usar esta poción.");
+            SocketManager.GAME_SEND_Ec_PACKET(this.player, "EI");
+            return;
+        }
+        int keepPercent = potion[1] >= 50 ? 85 : potion[1] >= 25 ? 68 : 50; // damage kept after the conversion
+
+        GameObject newObject = gameObject.getClone(1, true);
+        boolean converted = false;
+        for (SpellEffect effect : newObject.getEffects()) {
+            if (effect.getEffectID() != 100 && effect.getEffectID() != 95) continue;
+            String[] args = effect.getArgs().split(";");
+            int min = Integer.parseInt(args[0], 16), max = Integer.parseInt(args[1], 16);
+            if (max < min) max = min; // fixed damage lines store max = 0
+            min = Math.max(1, min * keepPercent / 100);
+            max = Math.max(min, max * keepPercent / 100);
+            String jet = min == max ? "0d0+" + min : "1d" + (max - min + 1) + "+" + (min - 1);
+            effect.setEffectID(effect.getEffectID() == 100 ? potion[0] : potion[0] - 5); // steal ids are damage ids - 5
+            effect.setArgs(Integer.toHexString(min) + ";" + (min == max ? "0" : Integer.toHexString(max)) + ";-1;0;0;" + jet);
+            converted = true;
+        }
+        if (!converted) {
+            this.player.sendMessage("Esta arma no tiene daños neutrales para cambiar de elemento.");
+            SocketManager.GAME_SEND_Ec_PACKET(this.player, "EI");
+            return;
+        }
+
+        int potionsLeft = this.ingredients.get(potionObject.getGuid()) - 1;
+        this.player.removeItemByTemplateId(potionObject.getTemplate().getId(), 1, false);
+        this.player.removeItem(gameObject.getGuid(), 1, true, true);
+        if (this.player.addItem(newObject, false, false))
+            World.world.addGameObject(newObject);
+
+        int winXP = Formulas.calculXpWinFm(gameObject.getTemplate().getLevel(), potion[1]) * Config.rateJob;
+        if (winXP > 0) this.SM.addXp(this.player, winXP);
+        this.player.send("JX|" + this.SM.getTemplate().getId() + ";" + this.SM.get_lvl() + ";" + this.SM.getXpString(";") + ";");
+
+        SocketManager.GAME_SEND_Ow_PACKET(this.player);
+        this.player.send("EmKO+" + newObject.getGuid() + "|1|" + newObject.getTemplate().getId() + "|" + newObject.encodeStats());
+        this.player.send("IO" + this.player.getId() + "|+" + newObject.getTemplate().getId());
+        this.player.send("EcK;" + newObject.getTemplate().getId());
+
+        this.player.send("EMKO-" + gameObject.getGuid() + "|1");
+        this.ingredients.clear();
+        this.player.send("EMKO+" + newObject.getGuid() + "|1");
+        this.ingredients.put(newObject.getGuid(), 1);
+        if (potionsLeft >= 1) {
+            this.player.send("EMKO+" + potionObject.getGuid() + "|" + potionsLeft);
+            this.ingredients.put(potionObject.getGuid(), potionsLeft);
+        } else {
+            this.player.send("EMKO-" + potionObject.getGuid());
+        }
     }
 
     private boolean analyzeObject(GameObject gameObject) {

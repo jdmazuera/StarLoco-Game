@@ -2,13 +2,18 @@ package org.starloco.locos.database.data.login;
 
 import com.mysql.jdbc.Statement;
 import com.zaxxer.hikari.HikariDataSource;
+import org.starloco.locos.client.Player;
+import org.starloco.locos.common.SocketManager;
 import org.starloco.locos.database.data.FunctionDAO;
 import org.starloco.locos.game.world.World;
+import org.starloco.locos.kernel.Constant;
 import org.starloco.locos.object.GameObject;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class ObjectData extends FunctionDAO<GameObject> {
 
@@ -151,6 +156,52 @@ public class ObjectData extends FunctionDAO<GameObject> {
                 }
             });
         } catch (SQLException e) {
+            super.sendError(e);
+        }
+    }
+
+    private boolean webEditsTableReady = false;
+
+    /** Applies stat edits queued by the web panel (rows of "statId:value;..." where value 0 removes the stat). */
+    public void applyWebEdits() {
+        try {
+            if (!webEditsTableReady) {
+                execute("CREATE TABLE IF NOT EXISTS web_item_edits (id INT AUTO_INCREMENT PRIMARY KEY, object_id INT NOT NULL, stats VARCHAR(2000) NOT NULL)");
+                webEditsTableReady = true;
+            }
+            Map<Integer, String[]> edits = new LinkedHashMap<>();
+            getData("SELECT id, object_id, stats FROM web_item_edits ORDER BY id;", result -> {
+                while (result.next())
+                    edits.put(result.getInt("id"), new String[]{result.getString("object_id"), result.getString("stats")});
+            });
+
+            for (Map.Entry<Integer, String[]> edit : edits.entrySet()) {
+                int objectId = Integer.parseInt(edit.getValue()[0]);
+                Player owner = World.world.getOnlinePlayers().stream()
+                        .filter(p -> p.getItems().containsKey(objectId)).findFirst().orElse(null);
+                if (owner != null && owner.getFight() != null) continue; // retried after the fight
+
+                GameObject object = World.world.getGameObject(objectId);
+                if (object != null) {
+                    for (String pair : edit.getValue()[1].split(";")) {
+                        if (pair.isEmpty()) continue;
+                        String[] kv = pair.split(":");
+                        int statId = Integer.parseInt(kv[0]), value = Integer.parseInt(kv[1]);
+                        if (value == 0) object.getStats().getEffects().remove(statId);
+                        else object.getStats().getEffects().put(statId, value);
+                    }
+                    update(object);
+                    if (owner != null) {
+                        SocketManager.GAME_SEND_UPDATE_OBJECT_DISPLAY_PACKET(owner, object);
+                        if (object.getPosition() != Constant.ITEM_POS_NO_EQUIPED) {
+                            owner.refreshStats();
+                            SocketManager.GAME_SEND_STATS_PACKET(owner);
+                        }
+                    }
+                }
+                execute("DELETE FROM web_item_edits WHERE id = " + edit.getKey() + ";");
+            }
+        } catch (Exception e) {
             super.sendError(e);
         }
     }

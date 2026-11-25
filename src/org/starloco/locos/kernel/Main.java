@@ -15,6 +15,7 @@ import org.starloco.locos.event.EventManager;
 import org.starloco.locos.exchange.ExchangeClient;
 import org.starloco.locos.game.GameServer;
 import org.starloco.locos.game.scheduler.Updatable;
+import org.starloco.locos.game.scheduler.entity.WebItemEdits;
 import org.starloco.locos.game.scheduler.entity.WorldPub;
 import org.starloco.locos.game.scheduler.entity.WorldSave;
 import org.starloco.locos.game.world.World;
@@ -88,7 +89,7 @@ public class Main {
 	        }
 
 	        final List<Updatable> updatables = Arrays.asList(
-	                WorldSave.instance, GameMap.updatable, Mount.updatable,
+	                WorldSave.instance, WebItemEdits.instance, GameMap.updatable, Mount.updatable,
                     WorldPub.instance,
                     AuctionManager.getInstance(), /*Tavernier.getInstance(),*/ EventManager.getInstance());
 
