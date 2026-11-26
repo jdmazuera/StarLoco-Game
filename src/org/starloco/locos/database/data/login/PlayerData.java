@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class PlayerData extends FunctionDAO<Player> {
@@ -441,15 +442,25 @@ public class PlayerData extends FunctionDAO<Player> {
         try {
             if (!webEditsTableReady) {
                 execute("CREATE TABLE IF NOT EXISTS web_player_edits (id INT AUTO_INCREMENT PRIMARY KEY, player_id INT NOT NULL, action VARCHAR(10) NOT NULL, stat INT NOT NULL DEFAULT 0, amount INT NOT NULL DEFAULT 0)");
+                execute("ALTER TABLE web_player_edits ADD COLUMN IF NOT EXISTS data VARCHAR(500) NOT NULL DEFAULT ''");
                 webEditsTableReady = true;
             }
-            List<int[]> edits = new ArrayList<>(); // id, player, action (0 boost, 1 reset, 2 item, 3 item with max roll), stat or template, amount, account
+            List<int[]> edits = new ArrayList<>(); // id, player, action (0 boost, 1 reset, 2 item, 3 item with max roll, 4 spawn), stat or template, amount, account
+            Map<Integer, String> editData = new HashMap<>(); // id => data (spawn: monster group "id,minLevel,maxLevel;...")
             getData("SELECT e.*, p.account FROM web_player_edits e LEFT JOIN " + getTableName() + " p ON p.id = e.player_id ORDER BY e.id;", result -> {
                 while (result.next())
+                    editData.put(result.getInt("id"), result.getString("data"));
                     edits.add(new int[]{result.getInt("id"), result.getInt("player_id"), webAction(result.getString("action")), result.getInt("stat"), result.getInt("amount"), result.getInt("account")});
             });
 
             for (int[] edit : edits) {
+                if (edit[2] == 4) { // spawn where the character is: only while it's online, retried after a fight
+                    Player online = World.world.getPlayer(edit[1]);
+                    if (online != null && online.isOnline() && online.getFight() != null) continue;
+                    if (online != null && online.isOnline()) spawnWebGroup(online, editData.get(edit[0]));
+                    execute("DELETE FROM web_player_edits WHERE id = " + edit[0] + ";");
+                    continue;
+                }
                 Player player = World.world.getPlayer(edit[1]);
                 if (player == null && edit[5] > 0) { // offline and not cached: load its account like a login does
                     World.world.ensureAccountLoaded(edit[5]);
@@ -481,6 +492,7 @@ public class PlayerData extends FunctionDAO<Player> {
             case "reset": return 1;
             case "item": return 2;
             case "itemmax": return 3;
+            case "spawn": return 4;
             default: return 0;
         }
     }
@@ -502,5 +514,15 @@ public class PlayerData extends FunctionDAO<Player> {
         }
         if (player.isOnline()) SocketManager.GAME_SEND_Ow_PACKET(player);
         update(player);
+    }
+
+    /** Spawns a monster group on the player's cell, like the admin SPAWN command. */
+    private void spawnWebGroup(Player player, String group) {
+        if (group == null || !group.matches("(\\d{1,5},\\d{1,3},\\d{1,3};){0,7}\\d{1,5},\\d{1,3},\\d{1,3}")) return;
+        for (String mob : group.split(";"))
+            if (World.world.getMonstre(Integer.parseInt(mob.split(",")[0])) == null) return;
+        if (player.getCurMap() == null || player.getCurCell() == null) return;
+        player.getCurMap().spawnGroupOnCommand(player.getCurCell().getId(), group, true);
+        player.sendMessage("Grupo de monstruos añadido desde el portal.");
     }
 }
