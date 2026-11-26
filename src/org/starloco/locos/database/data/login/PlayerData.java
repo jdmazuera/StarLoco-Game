@@ -15,6 +15,8 @@ import org.starloco.locos.game.world.World;
 import org.starloco.locos.kernel.Config;
 import org.starloco.locos.kernel.Constant;
 import org.starloco.locos.kernel.Main;
+import org.starloco.locos.object.GameObject;
+import org.starloco.locos.object.ObjectTemplate;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -441,10 +443,10 @@ public class PlayerData extends FunctionDAO<Player> {
                 execute("CREATE TABLE IF NOT EXISTS web_player_edits (id INT AUTO_INCREMENT PRIMARY KEY, player_id INT NOT NULL, action VARCHAR(10) NOT NULL, stat INT NOT NULL DEFAULT 0, amount INT NOT NULL DEFAULT 0)");
                 webEditsTableReady = true;
             }
-            List<int[]> edits = new ArrayList<>(); // id, player, isReset, stat, amount, account
+            List<int[]> edits = new ArrayList<>(); // id, player, action (0 boost, 1 reset, 2 item, 3 item with max roll), stat or template, amount, account
             getData("SELECT e.*, p.account FROM web_player_edits e LEFT JOIN " + getTableName() + " p ON p.id = e.player_id ORDER BY e.id;", result -> {
                 while (result.next())
-                    edits.add(new int[]{result.getInt("id"), result.getInt("player_id"), "reset".equals(result.getString("action")) ? 1 : 0, result.getInt("stat"), result.getInt("amount"), result.getInt("account")});
+                    edits.add(new int[]{result.getInt("id"), result.getInt("player_id"), webAction(result.getString("action")), result.getInt("stat"), result.getInt("amount"), result.getInt("account")});
             });
 
             for (int[] edit : edits) {
@@ -456,7 +458,9 @@ public class PlayerData extends FunctionDAO<Player> {
                 if (player != null && player.getFight() != null) continue; // retried after the fight
 
                 if (player != null) {
-                    if (edit[2] == 1) {
+                    if (edit[2] >= 2) {
+                        giveWebItem(player, edit[3], edit[4], edit[2] == 3);
+                    } else if (edit[2] == 1) {
                         player.resetStats(false); // keeps scroll points, gives back the capital
                         update(player);
                     } else if (edit[3] >= 10 && edit[3] <= 15 && edit[4] > 0 && edit[4] <= 2000) {
@@ -470,5 +474,33 @@ public class PlayerData extends FunctionDAO<Player> {
         } catch (Exception e) {
             super.sendError(e);
         }
+    }
+
+    private static int webAction(String action) {
+        switch (action == null ? "" : action) {
+            case "reset": return 1;
+            case "item": return 2;
+            case "itemmax": return 3;
+            default: return 0;
+        }
+    }
+
+    /** Creates an item from its template in the player's inventory (like the admin ITEM command) and saves it. */
+    private void giveWebItem(Player player, int templateId, int quantity, boolean useMax) {
+        ObjectTemplate template = World.world.getObjTemplate(templateId);
+        if (template == null || quantity < 1 || quantity > 10000
+                || template.getType() == Constant.ITEM_TYPE_CERTIF_MONTURE || template.getType() == Constant.ITEM_TYPE_OBJET_ELEVAGE)
+            return;
+        GameObject obj = template.createNewItem(quantity, useMax);
+        if (obj == null) return;
+        if (player.addItem(obj, true, true)) {
+            World.world.addGameObject(obj);
+        } else { // stacked onto an item the player already had: drop the new row, save the stack
+            ((ObjectData) DatabaseManager.get(ObjectData.class)).delete(obj);
+            for (GameObject item : player.getItems().values())
+                if (item.getTemplate().getId() == templateId) ((ObjectData) DatabaseManager.get(ObjectData.class)).update(item);
+        }
+        if (player.isOnline()) SocketManager.GAME_SEND_Ow_PACKET(player);
+        update(player);
     }
 }
